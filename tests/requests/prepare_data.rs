@@ -1,12 +1,12 @@
-use crate::requests::prepare_data;
 use axum::http::{HeaderName, HeaderValue};
-use interface::{LoginResponse, MeasureCreate};
+use interface::LoginResponse;
 use liftcalc::models::users;
 use loco_rs::{app::AppContext, TestServer};
 
 const USER_EMAIL: &str = "test@loco.com";
 const USER_PASSWORD: &str = "1234";
 
+#[allow(dead_code)] // `user` is handy for tests even when unused today
 pub struct LoggedInUser {
     pub user: users::Model,
     pub token: String,

@@ -1,6 +1,5 @@
-use leptos::*;
-mod api;
 use frontend::*;
+use leptos::*;
 
 pub fn main() {
     _ = console_log::init_with_level(log::Level::Debug);
