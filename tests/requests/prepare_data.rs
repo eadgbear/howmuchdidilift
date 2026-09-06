@@ -60,6 +60,7 @@ pub async fn create_measure(request: &TestServer, ctx: &AppContext) -> interface
     let create_request = interface::MeasureCreate {
         name: "grams".to_string(),
         grams: 1.0,
+        icon: None,
     };
 
     let measures = request
