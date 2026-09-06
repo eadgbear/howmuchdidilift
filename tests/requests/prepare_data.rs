@@ -1,8 +1,8 @@
+use crate::requests::prepare_data;
 use axum::http::{HeaderName, HeaderValue};
 use interface::{LoginResponse, MeasureCreate};
 use liftcalc::models::users;
 use loco_rs::{app::AppContext, TestServer};
-use crate::requests::prepare_data;
 
 const USER_EMAIL: &str = "test@loco.com";
 const USER_PASSWORD: &str = "1234";

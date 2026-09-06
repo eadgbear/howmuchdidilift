@@ -1,8 +1,10 @@
 use axum::Json;
 use insta::{assert_debug_snapshot, with_settings};
-use loco_rs::prelude::AppContext;
-use interface::{InputWeightType, Measure, MeasureCreate, RandomWeightRequest, RandomWeightResponse};
+use interface::{
+    InputWeightType, Measure, MeasureCreate, RandomWeightRequest, RandomWeightResponse,
+};
 use liftcalc::app::App;
+use loco_rs::prelude::AppContext;
 use loco_rs::{testing, TestServer};
 use serial_test::serial;
 
@@ -42,10 +44,11 @@ async fn can_create() {
     .await;
 }
 
-async fn list_measures(request:&TestServer, ctx: &AppContext) -> Vec<Measure> {
+async fn list_measures(request: &TestServer, ctx: &AppContext) -> Vec<Measure> {
     let user = prepare_data::init_user_login(request, ctx).await;
     let (auth_key, auth_value) = prepare_data::auth_header(&user.token);
-    let measures = request.get("/api/measures")
+    let measures = request
+        .get("/api/measures")
         .add_header(auth_key, auth_value)
         .await;
     measures.assert_status_ok();
@@ -64,7 +67,8 @@ async fn can_list() {
 
         let measures = list_measures(&request, &ctx).await;
         assert_debug_snapshot!((empty_measures, measures))
-    }).await
+    })
+    .await
 }
 
 #[tokio::test]
@@ -81,14 +85,16 @@ async fn can_delete() {
 
         let user = prepare_data::init_user_login(&request, &ctx).await;
         let (auth_key, auth_value) = prepare_data::auth_header(&user.token);
-        let measures = request.delete(&format!("/api/measures/{}", measure_id))
+        let measures = request
+            .delete(&format!("/api/measures/{}", measure_id))
             .add_header(auth_key, auth_value)
             .await;
         measures.assert_status_ok();
 
         let measures = list_measures(&request, &ctx).await;
         assert_debug_snapshot!((all_measures, measures))
-    }).await
+    })
+    .await
 }
 
 #[tokio::test]
@@ -106,13 +112,15 @@ async fn can_update() {
         measure.grams = measure.grams + 2.0;
         let user = prepare_data::init_user_login(&request, &ctx).await;
         let (auth_key, auth_value) = prepare_data::auth_header(&user.token);
-        let measures = request.post(&format!("/api/measures/{}", measure.id))
+        let measures = request
+            .post(&format!("/api/measures/{}", measure.id))
             .json(&measure)
             .add_header(auth_key.clone(), auth_value.clone())
             .await;
         measures.assert_status_ok();
 
-        let updated_measure = request.get(&format!("/api/measures/{}", measure.id))
+        let updated_measure = request
+            .get(&format!("/api/measures/{}", measure.id))
             .add_header(auth_key, auth_value)
             .await
             .json::<Measure>();
@@ -120,7 +128,8 @@ async fn can_update() {
 
         assert_eq!(measure.grams, updated_measure.grams);
         assert_debug_snapshot!((measure, updated_measure))
-    }).await
+    })
+    .await
 }
 
 #[tokio::test]

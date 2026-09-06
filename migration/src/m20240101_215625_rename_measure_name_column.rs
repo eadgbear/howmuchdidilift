@@ -1,6 +1,3 @@
-use std::borrow::BorrowMut;
-
-use loco_rs::schema::*;
 use sea_orm_migration::prelude::*;
 
 use crate::m20231224_205059_measures::Measures;
@@ -16,12 +13,8 @@ impl MigrationTrait for Migration {
             .rename_column(Measures::NamePlural, Measures::Name)
             .to_owned();
 
-        println!("{:?}", query.to_string(PostgresQueryBuilder::default()));
-        manager
-            .alter_table(
-                query
-            )
-            .await
+        println!("{:?}", query.to_string(PostgresQueryBuilder));
+        manager.alter_table(query).await
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
@@ -30,9 +23,8 @@ impl MigrationTrait for Migration {
                 Table::alter()
                     .table(Measures::Table)
                     .rename_column(Measures::Name, Measures::NamePlural)
-                    .to_owned()
+                    .to_owned(),
             )
             .await
     }
 }
-

@@ -1,10 +1,10 @@
+use super::prepare_data;
 use insta::{assert_debug_snapshot, with_settings};
+use interface::{LoginParams, LoginResponse, RegisterParams};
 use liftcalc::{app::App, models::users};
 use loco_rs::testing;
 use rstest::rstest;
 use serial_test::serial;
-use interface::{RegisterParams, LoginParams, LoginResponse};
-use super::prepare_data;
 
 // TODO: see how to dedup / extract this to app-local test utils
 // not to framework, because that would require a runtime dep on insta
@@ -67,10 +67,7 @@ async fn can_login_with_verify(#[case] test_name: &str, #[case] password: &str) 
         };
 
         //Creating a new user
-        _ = request
-            .post("/api/auth/register")
-            .json(&payload)
-            .await;
+        _ = request.post("/api/auth/register").json(&payload).await;
 
         let user = users::Model::find_by_email(&ctx.db, email).await.unwrap();
         let verify_payload = serde_json::json!({
@@ -80,13 +77,10 @@ async fn can_login_with_verify(#[case] test_name: &str, #[case] password: &str) 
 
         let login_payload = LoginParams {
             email: email.to_string(),
-            password: password.to_string()
+            password: password.to_string(),
         };
         //verify user request
-        let response = request
-            .post("/api/auth/login")
-            .json(&login_payload)
-            .await;
+        let response = request.post("/api/auth/login").json(&login_payload).await;
 
         // Make sure email_verified_at is set
         assert!(users::Model::find_by_email(&ctx.db, email)
@@ -120,21 +114,15 @@ async fn can_login_without_verify() {
         };
 
         //Creating a new user
-        _ = request
-            .post("/api/auth/register")
-            .json(&payload)
-            .await;
+        _ = request.post("/api/auth/register").json(&payload).await;
 
         let login_payload = LoginParams {
             email: email.to_string(),
-            password: password.to_string()
+            password: password.to_string(),
         };
 
         //verify user request
-        let response = request
-            .post("/api/auth/login")
-            .json(&login_payload)
-            .await;
+        let response = request.post("/api/auth/login").json(&login_payload).await;
 
         with_settings!({
             filters => testing::cleanup_user_model()

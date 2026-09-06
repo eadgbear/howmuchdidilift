@@ -1,10 +1,11 @@
-use interface::*;
 use gloo_storage::{LocalStorage, Storage};
+use interface::*;
 use leptos::*;
 use leptos_meta::provide_meta_context;
 use leptos_router::*;
 
 mod api;
+mod clipboard;
 mod components;
 mod pages;
 
@@ -22,9 +23,7 @@ pub fn App() -> impl IntoView {
     let logged_in = Signal::derive(move || authorized_api.get().is_some());
     let title_clicked = create_rw_signal(false);
 
-    let show_links = Signal::derive(move || {
-        title_clicked.get() || authorized_api.get().is_some()
-    });
+    let show_links = Signal::derive(move || title_clicked.get() || authorized_api.get().is_some());
 
     provide_context(authorized_api);
 
@@ -75,8 +74,7 @@ pub fn App() -> impl IntoView {
         match authorized_api.get() {
             Some(api) => {
                 log::debug!("API is now authorized");
-                LocalStorage::set(API_TOKEN_STORAGE_KEY, api.token)
-                    .expect("LocalStorage::set");
+                LocalStorage::set(API_TOKEN_STORAGE_KEY, api.token).expect("LocalStorage::set");
             }
             None => {
                 log::debug!("API is no longer authorized");
