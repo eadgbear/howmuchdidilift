@@ -52,24 +52,79 @@ fn randomize_skin_tone(base: &str) -> String {
     base.to_string()
 }
 
-/// Read a single Noto emoji SVG for a codepoint token (e.g. "1f35a" or the
-/// two-part "1f1e9_1f1ea" of a flag) and base64-encode it. `None` if missing.
-/// Skin-tone-capable emoji get a random tone.
-fn emoji_b64(token: &str) -> Option<String> {
+/// Give a nested emoji `<svg>` an explicit `width`/`height` matching its
+/// `viewBox`. Some Noto glyphs (e.g. 📦, ⚔) carry stray geometry outside the
+/// viewBox; without an intrinsic size, usvg sizes the embedded `<image>` from
+/// the content bounding box instead of the viewBox and *tiles* the glyph across
+/// the card. Pinning width/height to the viewBox extent stops that.
+fn pin_svg_size(bytes: Vec<u8>) -> Vec<u8> {
+    let Ok(text) = std::str::from_utf8(&bytes) else {
+        return bytes;
+    };
+    let Some(tag_start) = text.find("<svg") else {
+        return bytes;
+    };
+    let Some(tag_len) = text[tag_start..].find('>') else {
+        return bytes;
+    };
+    let tag = &text[tag_start..tag_start + tag_len];
+    if tag.contains(" width=") || tag.contains(" height=") {
+        return bytes;
+    }
+    // viewBox="min-x min-y width height" -> take the width/height pair.
+    let (w, h) = tag
+        .split_once("viewBox=\"")
+        .and_then(|(_, rest)| rest.split_once('"'))
+        .map(|(vb, _)| vb)
+        .and_then(|vb| {
+            let n: Vec<&str> = vb.split_whitespace().collect();
+            match n.as_slice() {
+                [_, _, w, h] => Some((w.to_string(), h.to_string())),
+                _ => None,
+            }
+        })
+        .unwrap_or_else(|| ("128".into(), "128".into()));
+    text.replacen("<svg", &format!(r#"<svg width="{w}" height="{h}""#), 1)
+        .into_bytes()
+}
+
+/// Rasterize an emoji SVG (by codepoint token) to a square PNG of `px` edge.
+/// Rasterizing to a fixed pixmap clips any stray out-of-viewBox geometry that
+/// would otherwise make the embedded glyph tile across the card (see
+/// `pin_svg_size`); `pin_svg_size` first ensures the tree's intrinsic size is
+/// the viewBox so the scale is computed correctly.
+fn emoji_png(cp: &str, px: u32) -> Option<Vec<u8>> {
+    let path = asset_root().join("emoji").join(format!("emoji_u{cp}.svg"));
+    let bytes = pin_svg_size(std::fs::read(path).ok()?);
+    let tree = usvg::Tree::from_data(&bytes, &usvg::Options::default()).ok()?;
+    let size = tree.size();
+    let scale = f32::from(u16::try_from(px).unwrap_or(u16::MAX)) / size.width().max(size.height());
+    let mut pixmap = tiny_skia::Pixmap::new(px, px)?;
+    resvg::render(
+        &tree,
+        tiny_skia::Transform::from_scale(scale, scale),
+        &mut pixmap.as_mut(),
+    );
+    pixmap.encode_png().ok()
+}
+
+/// A single Noto emoji as a base64 PNG `data:` URI (e.g. "1f35a" or the
+/// two-part "1f1e9_1f1ea" of a flag). `None` if missing. Skin-tone-capable
+/// emoji get a random tone. Rendered at 2× `EMOJI_SIZE` for crispness.
+fn emoji_href(token: &str) -> Option<String> {
     let cp = token.trim().to_lowercase();
     // Guard against path traversal — codepoints are hex + underscore only.
     if cp.is_empty() || !cp.chars().all(|c| c.is_ascii_hexdigit() || c == '_') {
         return None;
     }
     let cp = randomize_skin_tone(&cp);
-    let path = asset_root().join("emoji").join(format!("emoji_u{cp}.svg"));
-    std::fs::read(path).ok().map(|b| STANDARD.encode(b))
+    let px = u32::try_from(EMOJI_SIZE).unwrap_or(230) * 2;
+    let png = emoji_png(&cp, px)?;
+    Some(format!("data:image/png;base64,{}", STANDARD.encode(png)))
 }
 
-fn image_el(x: i32, y: i32, size: i32, b64: &str) -> String {
-    format!(
-        r#"<image x="{x}" y="{y}" width="{size}" height="{size}" href="data:image/svg+xml;base64,{b64}"/>"#
-    )
+fn image_el(x: i32, y: i32, size: i32, href: &str) -> String {
+    format!(r#"<image x="{x}" y="{y}" width="{size}" height="{size}" href="{href}"/>"#)
 }
 
 /// Pick a font size that keeps `text` within the card width, capped at `base`.
@@ -93,12 +148,12 @@ fn emoji_images(spec: Option<&str>, center_y: i32) -> String {
         .split('+')
         .filter(|t| !t.trim().is_empty())
         .take(2)
-        .filter_map(emoji_b64)
+        .filter_map(emoji_href)
         .collect();
 
     // No usable emoji → fall back to a question mark so the band isn't empty.
     if b64s.is_empty() {
-        b64s = emoji_b64("2753").into_iter().collect();
+        b64s = emoji_href("2753").into_iter().collect();
     }
 
     let size = EMOJI_SIZE;
