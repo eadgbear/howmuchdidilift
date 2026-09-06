@@ -38,8 +38,11 @@ rand = "0.8.5"
 axum-macros = "0.4.0"
 #fuzzy_fraction = "0.1.2"
 numfmt = "1.1.1"
+toml = "0.8"
 rust_decimal = "1.33.1"
 rust_decimal_macros = "1.33.1"
+resvg = "0.44"
+base64 = "0.22"
 
 [[bin]]
 name = "liftcalc-cli"

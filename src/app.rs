@@ -43,12 +43,21 @@ impl Hooks for App {
 
     fn routes() -> AppRoutes {
         AppRoutes::with_default_routes()
-
             .prefix("/api")
             .add_route(controllers::measure::routes())
+            .add_route(controllers::emoji::routes())
             //.add_route(controllers::notes::routes())
             .add_route(controllers::auth::routes())
             .add_route(controllers::user::routes())
+    }
+
+    /// Mount the share permalink at the root (outside the `/api` prefix) so
+    /// `/w/225lbs` unfurls / redirects. `weight_page` takes no state.
+    async fn after_routes(router: axum::Router, _ctx: &AppContext) -> Result<axum::Router> {
+        Ok(router.route(
+            "/w/:spec",
+            axum::routing::get(controllers::pages::weight_page),
+        ))
     }
 
     fn connect_workers<'a>(p: &'a mut Processor, ctx: &'a AppContext) {

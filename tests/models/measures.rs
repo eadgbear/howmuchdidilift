@@ -23,6 +23,7 @@ async fn test_model() {
     let create_params = MeasureCreate {
         name: "burgers".to_string(),
         grams: 500.0,
+        icon: None,
     };
     let create_req = measures::ActiveModel::create(&boot.app_context.db, create_params).await;
     println!("{:?}", create_req);

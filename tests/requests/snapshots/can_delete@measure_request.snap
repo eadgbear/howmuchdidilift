@@ -8,6 +8,7 @@ expression: "(all_measures, measures)"
             id: 1,
             name: "grams",
             grams: 1.0,
+            icon: None,
         },
     ],
     [],

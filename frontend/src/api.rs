@@ -1,56 +1,66 @@
 use interface::*;
 
+use base64::Engine as _;
+use eyre::{Result, WrapErr};
 use gloo_net::http::{Request, RequestBuilder};
-use eyre::{WrapErr, Result};
 use leptos::server_fn::serde;
 
 #[derive(Clone, Copy)]
 pub struct UnauthorizedApi {
-    url: &'static str
+    url: &'static str,
 }
 
 #[derive(Clone)]
 pub struct AuthorizedApi {
     pub url: &'static str,
-    pub token: String
+    pub token: String,
 }
 
 impl UnauthorizedApi {
     pub const fn new(url: &'static str) -> Self {
-        Self {url}
+        Self { url }
     }
 
     pub async fn register(&self, params: &RegisterParams) -> Result<()> {
         let url = format!("{}/auth/register", self.url);
         let response = Request::post(&url).json(params)?.send().await?;
-        response.json::<()>()
+        response
+            .json::<()>()
             .await
             .wrap_err(format!("Registration call failed"))
     }
 
     pub async fn login(&self, params: &LoginParams) -> Result<AuthorizedApi> {
         let url = format!("{}/auth/login", self.url);
-        let response = Request::post(&url)
-            .json(params)?
-            .send()
-            .await?;
-        let login_response:LoginResponse = response.json().await?;
+        let response = Request::post(&url).json(params)?.send().await?;
+        let login_response: LoginResponse = response.json().await?;
         Ok(AuthorizedApi::new(self.url, login_response.token))
     }
 
-    pub async fn convert(&self, params: RandomWeightRequest) -> Result<RandomWeightResponse> {
-        let url = format!("{}/measures/convert", self.url);
-        let response = Request::post(&url)
-            .json(&params)?
-            .send()
-            .await?;
-        Ok(response.json().await?)
+    /// Fetch a share-card PNG (always a fresh random measure) and its matching
+    /// share sentence (from the `x-share-text` response header), in one request.
+    /// Returns a `data:` URL usable directly as an `<img>` src, plus the text.
+    pub async fn fetch_card(
+        &self,
+        amt: &str,
+        unit_lower: &str,
+    ) -> Result<(String, Option<String>)> {
+        let url = format!("{}/measures/card?amt={amt}&unit={unit_lower}", self.url);
+        let response = Request::get(&url).send().await?;
+        let share = response
+            .headers()
+            .get("x-share-text")
+            .and_then(|b64| base64::engine::general_purpose::STANDARD.decode(b64).ok())
+            .and_then(|bytes| String::from_utf8(bytes).ok());
+        let bytes = response.binary().await?;
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+        Ok((format!("data:image/png;base64,{b64}"), share))
     }
 }
 
 impl AuthorizedApi {
     pub fn new(url: &'static str, token: String) -> Self {
-        Self {url, token }
+        Self { url, token }
     }
 
     fn auth_header_value(&self) -> String {
@@ -61,15 +71,15 @@ impl AuthorizedApi {
         rb.header("Authorization", &self.auth_header_value())
     }
 
-    async fn send<T>(&self, mut req:RequestBuilder) -> Result<T>
-    where T: serde::de::DeserializeOwned {
+    async fn send<T>(&self, mut req: RequestBuilder) -> Result<T>
+    where
+        T: serde::de::DeserializeOwned,
+    {
         let response = req
             .header("Authorization", &self.auth_header_value())
             .send()
             .await?;
-        response.json::<T>()
-            .await
-            .map_err(|e|e.into())
+        response.json::<T>().await.map_err(|e| e.into())
     }
 
     pub async fn current_user(&self) -> Result<CurrentResponse> {
@@ -98,6 +108,16 @@ impl AuthorizedApi {
         self.send(Request::get(&url)).await
     }
 
+    /// Search the server-side emoji index (only matches come back).
+    pub async fn search_emoji(&self, query: &str) -> Result<Vec<EmojiEntry>> {
+        let url = format!(
+            "{}/emoji?limit=60&q={}",
+            self.url,
+            query.replace(' ', "%20")
+        );
+        self.send(Request::get(&url)).await
+    }
+
     pub async fn get_one(&self, id: i32) -> Result<Measure> {
         let url = format!("{}/measures/{}", self.url, id);
         self.send(Request::get(&url)).await
@@ -112,7 +132,8 @@ impl AuthorizedApi {
         let url = format!("{}/measures/{}", self.url, measure.id);
         self.with_auth(Request::post(&url))
             .json(&measure)?
-            .send().await?
+            .send()
+            .await?
             .json::<Measure>()
             .await
             .wrap_err(format!("Failed to update measure"))

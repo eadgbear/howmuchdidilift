@@ -1,8 +1,8 @@
+use crate::requests::prepare_data;
 use axum::http::{HeaderName, HeaderValue};
 use interface::{LoginResponse, MeasureCreate};
 use liftcalc::models::users;
 use loco_rs::{app::AppContext, TestServer};
-use crate::requests::prepare_data;
 
 const USER_EMAIL: &str = "test@loco.com";
 const USER_PASSWORD: &str = "1234";
@@ -60,6 +60,7 @@ pub async fn create_measure(request: &TestServer, ctx: &AppContext) -> interface
     let create_request = interface::MeasureCreate {
         name: "grams".to_string(),
         grams: 1.0,
+        icon: None,
     };
 
     let measures = request
