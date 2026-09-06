@@ -154,18 +154,18 @@ async fn can_convert_lbs() {
             .await;
         random_weight.assert_status_ok();
 
+        // The measure is chosen at random (config defaults + DB), so assert the
+        // stable shape rather than snapshotting a random result.
         let random_weight: RandomWeightResponse = random_weight.json();
-        //assert_debug_snapshot!(random_weight);
-
-        with_settings!({
-            filters => {
-                 testing::CLEANUP_DATE.to_vec()
-            }
-        }, {
-            assert_debug_snapshot!(
-                random_weight
-            );
-        });
+        assert_eq!(random_weight.input_type.to_string(), "Lbs");
+        assert!(!random_weight.output_weight.is_empty());
+        assert!(!random_weight.units.is_empty());
+        assert!(
+            random_weight.permalink.contains("100lbs"),
+            "permalink was {}",
+            random_weight.permalink
+        );
+        assert!(random_weight.share_text.contains("howmuchdidilift.com"));
     })
     .await;
 }
@@ -193,15 +193,15 @@ async fn can_convert_kgs() {
         random_weight.assert_status_ok();
 
         let random_weight: RandomWeightResponse = random_weight.json();
-        with_settings!({
-            filters => {
-                 testing::CLEANUP_DATE.to_vec()
-            }
-        }, {
-            assert_debug_snapshot!(
-                random_weight
-            );
-        });
+        assert_eq!(random_weight.input_type.to_string(), "Kgs");
+        assert!(!random_weight.output_weight.is_empty());
+        assert!(!random_weight.units.is_empty());
+        assert!(
+            random_weight.permalink.contains("1kgs"),
+            "permalink was {}",
+            random_weight.permalink
+        );
+        assert!(random_weight.share_text.contains("howmuchdidilift.com"));
     })
     .await;
 }
