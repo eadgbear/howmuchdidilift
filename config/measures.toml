@@ -183,6 +183,13 @@ measures = [
   { name = "Peruvian Alpacas", grams = 65000.0, icon = ["1f1f5_1f1ea", "1f999"] },
   { name = "New Zealand Kiwifruit", grams = 100.0, icon = ["1f1f3_1f1ff", "1f95d"] },
 
+  # ── Iconic national things (kept alongside the exports above) ──
+  { name = "German-built Cars", grams = 1500000.0, icon = ["1f1e9_1f1ea", "1f697"] },
+  { name = "Japanese Sushi Rolls", grams = 30.0, icon = ["1f1ef_1f1f5", "1f363"] },
+  { name = "Chinese Pandas", grams = 100000.0, icon = ["1f1e8_1f1f3", "1f43c"] },
+  { name = "Indian Elephants", grams = 4000000.0, icon = ["1f1ee_1f1f3", "1f418"] },
+  { name = "Brazilian Soccer Balls", grams = 430.0, icon = ["1f1e7_1f1f7", "26bd"] },
+
   # ── Deadpan absurd (obscure subject + a mood it has no business having) ──
   { name = "Lovestruck Whales", grams = 150000000.0, icon = ["1f40b", "1f498"] },
   { name = "Sinister Accordions", grams = 5000.0, icon = ["1fa97", "1f608"] },
