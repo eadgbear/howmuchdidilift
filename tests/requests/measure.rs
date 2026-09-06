@@ -1,8 +1,5 @@
-use axum::Json;
 use insta::{assert_debug_snapshot, with_settings};
-use interface::{
-    InputWeightType, Measure, MeasureCreate, RandomWeightRequest, RandomWeightResponse,
-};
+use interface::{InputWeightType, Measure, RandomWeightRequest, RandomWeightResponse};
 use liftcalc::app::App;
 use loco_rs::prelude::AppContext;
 use loco_rs::{testing, TestServer};
@@ -63,7 +60,7 @@ async fn can_list() {
     testing::request::<App, _, _>(|request, ctx| async move {
         let empty_measures = list_measures(&request, &ctx).await;
 
-        let measure = prepare_data::create_measure(&request, &ctx).await;
+        let _measure = prepare_data::create_measure(&request, &ctx).await;
 
         let measures = list_measures(&request, &ctx).await;
         assert_debug_snapshot!((empty_measures, measures))
@@ -77,7 +74,7 @@ async fn can_delete() {
     configure_insta!();
 
     testing::request::<App, _, _>(|request, ctx| async move {
-        let measure = prepare_data::create_measure(&request, &ctx).await;
+        let _measure = prepare_data::create_measure(&request, &ctx).await;
 
         let all_measures = list_measures(&request, &ctx).await;
         assert!(!all_measures.is_empty());
@@ -103,7 +100,7 @@ async fn can_update() {
     configure_insta!();
 
     testing::request::<App, _, _>(|request, ctx| async move {
-        let measure = prepare_data::create_measure(&request, &ctx).await;
+        let _measure = prepare_data::create_measure(&request, &ctx).await;
 
         let mut all_measures = list_measures(&request, &ctx).await;
         assert!(!all_measures.is_empty());
@@ -124,7 +121,7 @@ async fn can_update() {
             .add_header(auth_key, auth_value)
             .await
             .json::<Measure>();
-        let list = list_measures(&request, &ctx).await;
+        let _list = list_measures(&request, &ctx).await;
 
         assert_eq!(measure.grams, updated_measure.grams);
         assert_debug_snapshot!((measure, updated_measure))
@@ -138,7 +135,7 @@ async fn can_convert_lbs() {
     configure_insta!();
 
     testing::request::<App, _, _>(|request, ctx| async move {
-        let measure = prepare_data::create_measure(&request, &ctx).await;
+        let _measure = prepare_data::create_measure(&request, &ctx).await;
 
         let user = init_user_login(&request, &ctx).await;
         let (auth_key, auth_value) = auth_header(&user.token);
@@ -176,7 +173,7 @@ async fn can_convert_kgs() {
     configure_insta!();
 
     testing::request::<App, _, _>(|request, ctx| async move {
-        let measure = prepare_data::create_measure(&request, &ctx).await;
+        let _measure = prepare_data::create_measure(&request, &ctx).await;
 
         let user = init_user_login(&request, &ctx).await;
         let (auth_key, auth_value) = auth_header(&user.token);

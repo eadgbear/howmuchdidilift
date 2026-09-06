@@ -71,7 +71,7 @@ impl AuthorizedApi {
         rb.header("Authorization", &self.auth_header_value())
     }
 
-    async fn send<T>(&self, mut req: RequestBuilder) -> Result<T>
+    async fn send<T>(&self, req: RequestBuilder) -> Result<T>
     where
         T: serde::de::DeserializeOwned,
     {
@@ -115,11 +115,6 @@ impl AuthorizedApi {
             self.url,
             query.replace(' ', "%20")
         );
-        self.send(Request::get(&url)).await
-    }
-
-    pub async fn get_one(&self, id: i32) -> Result<Measure> {
-        let url = format!("{}/measures/{}", self.url, id);
         self.send(Request::get(&url)).await
     }
 

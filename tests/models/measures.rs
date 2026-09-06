@@ -1,4 +1,3 @@
-use insta::{assert_debug_snapshot, with_settings};
 use interface::MeasureCreate;
 use liftcalc::{app::App, models::measures};
 use loco_rs::testing;

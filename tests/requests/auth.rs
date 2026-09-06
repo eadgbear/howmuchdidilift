@@ -1,6 +1,5 @@
-use super::prepare_data;
 use insta::{assert_debug_snapshot, with_settings};
-use interface::{LoginParams, LoginResponse, RegisterParams};
+use interface::{LoginParams, RegisterParams};
 use liftcalc::{app::App, models::users};
 use loco_rs::testing;
 use rstest::rstest;

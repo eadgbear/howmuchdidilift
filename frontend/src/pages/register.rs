@@ -1,8 +1,4 @@
-use crate::{
-    api::{self, UnauthorizedApi},
-    components::credentials::*,
-    Page,
-};
+use crate::{api::UnauthorizedApi, components::credentials::*, Page};
 use interface::*;
 use leptos::{logging::log, *};
 use leptos_router::*;

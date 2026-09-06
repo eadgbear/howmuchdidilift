@@ -45,7 +45,7 @@ pub fn App() -> impl IntoView {
 
     let logout = create_action(move |_| async move {
         match authorized_api.get() {
-            Some(api) => {
+            Some(_api) => {
                 authorized_api.update(|a| *a = None);
                 user_info.update(|a| *a = None);
             }
