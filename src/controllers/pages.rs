@@ -18,7 +18,7 @@ use loco_rs::prelude::*;
 
 /// Social/preview crawlers that should receive the OG HTML. Everyone else is a
 /// real browser and gets redirected into the interactive app.
-const CRAWLER_UAS: [&str; 11] = [
+const CRAWLER_UAS: [&str; 14] = [
     "discordbot",
     "facebookexternalhit",
     "twitterbot",
@@ -30,6 +30,9 @@ const CRAWLER_UAS: [&str; 11] = [
     "googlebot",
     "bingbot",
     "embedly",
+    "bluesky", // Bluesky link previews: service name, domain, and fetcher name
+    "bsky",
+    "cardyb",
 ];
 
 fn is_crawler(headers: &HeaderMap) -> bool {
@@ -263,6 +266,12 @@ mod tests {
         assert!(is_crawler(&ua("Mozilla/5.0 (compatible; Discordbot/2.0)")));
         assert!(is_crawler(&ua("Twitterbot/1.0")));
         assert!(is_crawler(&ua("facebookexternalhit/1.1")));
+        assert!(is_crawler(&ua(
+            "Mozilla/5.0 (compatible; Bluesky Cardyb/1.1; +mailto:support@bsky.app)"
+        )));
+        assert!(is_crawler(&ua(
+            "Mozilla/5.0 (compatible; Bluesky NewFetcher/2.0)"
+        )));
         assert!(!is_crawler(&ua(
             "Mozilla/5.0 (Macintosh) AppleWebKit/537.36 Chrome/120 Safari/537.36"
         )));
