@@ -30,6 +30,10 @@ pub fn Convert(api: UnauthorizedApi, show_links: RwSignal<bool>) -> impl IntoVie
     // Latest card: (data-url image, optional share sentence).
     let result = create_rw_signal(None::<(String, Option<String>)>);
     let copied = create_rw_signal(None::<String>);
+    // URL-driven options: `/?e=…` compares against the closest measures, and
+    // repeated `q` params filter measures by name. Both stick for the session.
+    let at_least = create_rw_signal(false);
+    let search_terms = create_rw_signal(crate::url::query_all("q"));
 
     let click_count = create_rw_signal(0);
     create_effect(move |_| {
@@ -49,7 +53,11 @@ pub fn Convert(api: UnauthorizedApi, show_links: RwSignal<bool>) -> impl IntoVie
             }
             set_wait_for_response.set(true);
             copied.set(None);
-            match api.fetch_card(&weight, &unit_lower).await {
+            let terms = search_terms.get_untracked();
+            match api
+                .fetch_card(&weight, &unit_lower, at_least.get_untracked(), &terms)
+                .await
+            {
                 Ok(card) => {
                     set_error.set(None);
                     result.set(Some(card));
@@ -82,16 +90,23 @@ pub fn Convert(api: UnauthorizedApi, show_links: RwSignal<bool>) -> impl IntoVie
         }
     });
 
-    // Deep-link support: `/?w=225lbs` pre-fills and auto-converts (once).
+    // Deep-link support: `/?w=225lbs` (or `/?e=225lbs` for closest-match)
+    // pre-fills and auto-converts (once).
     let query = use_query_map();
     let did_init = create_rw_signal(false);
     create_effect(move |_| {
         if did_init.get_untracked() {
             return;
         }
-        if let Some(spec) = query.with(|q| q.get("w").cloned()) {
+        let spec = query.with(|q| {
+            q.get("w")
+                .map(|s| (s.clone(), false))
+                .or_else(|| q.get("e").map(|s| (s.clone(), true)))
+        });
+        if let Some((spec, exact)) = spec {
             if let Some((amt_s, unit_s)) = parse_spec(&spec) {
                 did_init.set(true);
+                at_least.set(exact);
                 set_amt.set(amt_s.clone());
                 set_input_type.set(unit_s.clone());
                 convert_action.dispatch((amt_s, unit_s));

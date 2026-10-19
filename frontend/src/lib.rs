@@ -8,6 +8,7 @@ mod api;
 mod clipboard;
 mod components;
 mod pages;
+mod url;
 
 use self::{components::*, pages::*};
 

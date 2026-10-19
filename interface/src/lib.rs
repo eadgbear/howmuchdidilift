@@ -82,10 +82,19 @@ pub enum InputWeightType {
     Kgs,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, EnumIter, EnumString, strum::Display)]
+#[serde(rename_all = "lowercase")]
+pub enum MatchType {
+    Mult,
+    AtLeast,
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct RandomWeightRequest {
     pub input_amt: f64,
     pub input_type: InputWeightType,
+    pub match_type: Option<MatchType>,
+    pub name_search: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

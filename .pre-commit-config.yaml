@@ -1,0 +1,17 @@
+# Mirrors the rustfmt / clippy jobs in .github/workflows/ci.yaml.
+# Install with: pre-commit install
+repos:
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt --all -- --check
+        language: system
+        types: [rust]
+        pass_filenames: false
+      - id: cargo-clippy
+        name: cargo clippy
+        entry: cargo clippy --all-features -- -D warnings -W clippy::pedantic -W clippy::nursery -W rust-2018-idioms
+        language: system
+        types: [rust]
+        pass_filenames: false

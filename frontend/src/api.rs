@@ -39,13 +39,23 @@ impl UnauthorizedApi {
 
     /// Fetch a share-card PNG (always a fresh random measure) and its matching
     /// share sentence (from the `x-share-text` response header), in one request.
+    /// `at_least` compares against the closest measures; `terms` restrict the
+    /// pick to measures whose name matches any of them.
     /// Returns a `data:` URL usable directly as an `<img>` src, plus the text.
     pub async fn fetch_card(
         &self,
         amt: &str,
         unit_lower: &str,
+        at_least: bool,
+        terms: &[String],
     ) -> Result<(String, Option<String>)> {
-        let url = format!("{}/measures/card?amt={amt}&unit={unit_lower}", self.url);
+        let mut url = format!("{}/measures/card?amt={amt}&unit={unit_lower}", self.url);
+        if at_least {
+            url.push_str("&match=atleast");
+        }
+        for t in terms {
+            url.push_str(&format!("&q={}", crate::url::encode_component(t)));
+        }
         let response = Request::get(&url).send().await?;
         let share = response
             .headers()
