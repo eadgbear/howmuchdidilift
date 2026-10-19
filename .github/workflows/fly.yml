@@ -7,7 +7,9 @@ jobs:
   deploy:
     name: Deploy app
     runs-on: ubuntu-latest
-    concurrency: deploy-group    # optional: ensure only one action runs at a time
+    concurrency:
+      group: deploy-group    # only one deploy at a time
+      cancel-in-progress: true    # a newer push supersedes the running deploy
     steps:
       - uses: actions/checkout@v4
       - uses: superfly/flyctl-actions/setup-flyctl@master
