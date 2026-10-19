@@ -16,8 +16,8 @@ use sea_orm::{
 
 use crate::models::_entities::measures::{Column, Entity};
 
-/// AtLeast: only measures where `lift / measure` is at most this are "close".
-const AT_LEAST_MARGIN: f64 = 1.5;
+/// AtLeast: candidates must weigh at least this fraction of the closest measure.
+const AT_LEAST_MARGIN: f64 = 0.9;
 /// AtLeast: pick randomly among at most this many of the closest measures.
 const AT_LEAST_TOP_N: usize = 5;
 
@@ -88,9 +88,9 @@ async fn gather(db: &DatabaseConnection, terms: &[String]) -> Result<Vec<Measure
     Ok(all)
 }
 
-/// The closest measures not heavier than the lift, within [`AT_LEAST_MARGIN`]
-/// and capped at [`AT_LEAST_TOP_N`]. Falls back to the single nearest lighter
-/// measure, then to the lightest measure overall if everything is heavier.
+/// The closest measures not heavier than the lift: the heaviest such measure
+/// (however far below the lift) plus any within [`AT_LEAST_MARGIN`] of it,
+/// capped at [`AT_LEAST_TOP_N`]. Empty if every measure is heavier.
 fn at_least_candidates(lift_grams: f64, measures: &[Measure]) -> Vec<&Measure> {
     let mut below: Vec<&Measure> = measures
         .iter()
@@ -98,23 +98,13 @@ fn at_least_candidates(lift_grams: f64, measures: &[Measure]) -> Vec<&Measure> {
         .collect();
     below.sort_by(|a, b| b.grams.total_cmp(&a.grams));
 
-    let close: Vec<&Measure> = below
-        .iter()
-        .copied()
-        .filter(|m| lift_grams / m.grams <= AT_LEAST_MARGIN)
-        .take(AT_LEAST_TOP_N)
-        .collect();
-    if !close.is_empty() {
-        return close;
-    }
-    if let Some(nearest) = below.first() {
-        return vec![nearest];
-    }
-    measures
-        .iter()
-        .filter(|m| m.grams > 0.0)
-        .min_by(|a, b| a.grams.total_cmp(&b.grams))
+    let Some(closest) = below.first().map(|m| m.grams) else {
+        return Vec::new();
+    };
+    below
         .into_iter()
+        .take_while(|m| m.grams >= closest * AT_LEAST_MARGIN)
+        .take(AT_LEAST_TOP_N)
         .collect()
 }
 
@@ -122,13 +112,15 @@ fn at_least_candidates(lift_grams: f64, measures: &[Measure]) -> Vec<&Measure> {
 ///
 /// Candidates are every measure whose name matches any of `terms` (all measures
 /// if `terms` is empty or nothing matches). `Mult` picks uniformly at random;
-/// `AtLeast` picks randomly among the closest measures not heavier than the lift.
+/// `AtLeast` picks randomly among the closest measures not heavier than the
+/// lift, falling back to `Mult` if every candidate is heavier. Returns the
+/// match type actually used alongside the measure.
 pub async fn pick_measure(
     db: &DatabaseConnection,
     lift_grams: f64,
     match_type: &MatchType,
     terms: &[String],
-) -> Result<Measure> {
+) -> Result<(Measure, MatchType)> {
     let terms: Vec<String> = terms
         .iter()
         .map(|t| t.trim().to_string())
@@ -141,13 +133,15 @@ pub async fn pick_measure(
     }
 
     let mut rng = rand::thread_rng();
-    let picked = match match_type {
-        MatchType::Mult => candidates.choose(&mut rng),
-        MatchType::AtLeast => at_least_candidates(lift_grams, &candidates)
-            .choose(&mut rng)
-            .copied(),
-    };
-    picked.cloned().ok_or_else(|| Error::NotFound)
+    if matches!(match_type, MatchType::AtLeast) {
+        if let Some(m) = at_least_candidates(lift_grams, &candidates).choose(&mut rng) {
+            return Ok(((*m).clone(), MatchType::AtLeast));
+        }
+    }
+    candidates
+        .choose(&mut rng)
+        .map(|m| (m.clone(), MatchType::Mult))
+        .ok_or_else(|| Error::NotFound)
 }
 
 #[cfg(test)]
@@ -167,9 +161,15 @@ mod tests {
     }
 
     #[test]
-    fn at_least_keeps_close_lighter_measures() {
-        let ms = [m("a", 50.0), m("b", 80.0), m("c", 95.0), m("d", 120.0)];
-        assert_eq!(names(&at_least_candidates(100.0, &ms)), ["c", "b"]);
+    fn at_least_keeps_measures_near_the_closest() {
+        let ms = [
+            m("a", 50.0),
+            m("b", 80.0),
+            m("c", 88.0),
+            m("d", 95.0),
+            m("e", 120.0),
+        ];
+        assert_eq!(names(&at_least_candidates(100.0, &ms)), ["d", "c"]);
     }
 
     #[test]
@@ -183,15 +183,20 @@ mod tests {
     }
 
     #[test]
-    fn at_least_falls_back_to_nearest_below() {
-        let ms = [m("tiny", 1.0), m("small", 10.0), m("huge", 1000.0)];
-        assert_eq!(names(&at_least_candidates(100.0, &ms)), ["small"]);
+    fn at_least_anchors_on_closest_however_far() {
+        let ms = [
+            m("tiny", 1.0),
+            m("near", 9.5),
+            m("nearest", 10.0),
+            m("huge", 1000.0),
+        ];
+        assert_eq!(names(&at_least_candidates(100.0, &ms)), ["nearest", "near"]);
     }
 
     #[test]
-    fn at_least_falls_back_to_lightest_when_all_heavier() {
+    fn at_least_is_empty_when_all_heavier() {
         let ms = [m("big", 500.0), m("bigger", 200.0)];
-        assert_eq!(names(&at_least_candidates(100.0, &ms)), ["bigger"]);
+        assert!(at_least_candidates(100.0, &ms).is_empty());
     }
 
     #[test]

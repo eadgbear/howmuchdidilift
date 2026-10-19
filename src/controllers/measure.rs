@@ -194,7 +194,8 @@ pub async fn convert(
     let match_type = params.match_type.unwrap_or(MatchType::Mult);
     let terms = params.name_search.unwrap_or_default();
     let lift_grams = params.input_amt * grams_multiplier(&params.input_type);
-    let measure = crate::fact_store::pick_measure(&ctx.db, lift_grams, &match_type, &terms).await?;
+    let (measure, match_type) =
+        crate::fact_store::pick_measure(&ctx.db, lift_grams, &match_type, &terms).await?;
     let r = build_lift_result(params.input_amt, &params.input_type, &measure, &match_type);
 
     let mut f = Formatter::new()
@@ -244,7 +245,8 @@ pub async fn card(
     // `Query` keeps only one value per key, so read the repeatable `q` raw.
     let terms = crate::controllers::pages::search_terms(query.as_deref());
     let lift_grams = params.amt * grams_multiplier(&params.unit);
-    let measure = crate::fact_store::pick_measure(&ctx.db, lift_grams, &match_type, &terms).await?;
+    let (measure, match_type) =
+        crate::fact_store::pick_measure(&ctx.db, lift_grams, &match_type, &terms).await?;
     let r = build_lift_result(params.amt, &params.unit, &measure, &match_type);
 
     let png = crate::card::render_card(
