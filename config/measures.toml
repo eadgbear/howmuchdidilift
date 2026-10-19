@@ -100,6 +100,7 @@ measures = [
   { name = "Cargo Ships", grams = 100000000.0, icon = ["1f6a2"] },
   { name = "Steam Locomotives", grams = 168000000.0, icon = ["1f682"] },
   { name = "London Buses", grams = 12000000.0, icon = ["1f68c"] },
+  { name = "Skill Issues", grams = 1540000.0, icon = ["1f3cb", "1f697"] },
 
   # ── Objects ────────────────────────────────────────────────────
   { name = "Guitars", grams = 3000.0, icon = ["1f3b8"] },
