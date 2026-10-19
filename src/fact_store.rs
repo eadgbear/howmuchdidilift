@@ -174,7 +174,9 @@ mod tests {
 
     #[test]
     fn at_least_caps_at_top_n() {
-        let ms: Vec<Measure> = (0..10).map(|i| m(&i.to_string(), 90.0 + f64::from(i))).collect();
+        let ms: Vec<Measure> = (0..10)
+            .map(|i| m(&i.to_string(), 90.0 + f64::from(i)))
+            .collect();
         let picked = at_least_candidates(100.0, &ms);
         assert_eq!(picked.len(), AT_LEAST_TOP_N);
         assert_eq!(picked[0].name, "9");
@@ -196,7 +198,10 @@ mod tests {
     fn name_filter_is_case_insensitive_or() {
         let ms = [m("House Cats", 1.0), m("Dogs", 1.0), m("Bananas", 1.0)];
         let terms = ["CAT".to_string(), "dog".to_string()];
-        let got: Vec<String> = filter_by_name(&ms, &terms).into_iter().map(|m| m.name).collect();
+        let got: Vec<String> = filter_by_name(&ms, &terms)
+            .into_iter()
+            .map(|m| m.name)
+            .collect();
         assert_eq!(got, ["House Cats", "Dogs"]);
         assert_eq!(filter_by_name(&ms, &[]).len(), 3);
     }

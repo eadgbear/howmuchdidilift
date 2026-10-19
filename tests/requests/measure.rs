@@ -1,7 +1,5 @@
 use insta::{assert_debug_snapshot, with_settings};
-use interface::{
-    InputWeightType, MatchType, Measure, RandomWeightRequest, RandomWeightResponse,
-};
+use interface::{InputWeightType, MatchType, Measure, RandomWeightRequest, RandomWeightResponse};
 use liftcalc::app::App;
 use loco_rs::prelude::AppContext;
 use loco_rs::{testing, TestServer};

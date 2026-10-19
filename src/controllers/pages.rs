@@ -96,8 +96,11 @@ fn q_suffix(terms: &[String]) -> String {
     terms
         .iter()
         .filter_map(|t| serde_urlencoded::to_string([("q", t)]).ok())
-        .map(|pair| format!("&{pair}"))
-        .collect()
+        .fold(String::new(), |mut out, pair| {
+            out.push('&');
+            out.push_str(&pair);
+            out
+        })
 }
 
 /// Best-effort absolute base URL from proxy headers, falling back to the Host.
@@ -125,7 +128,13 @@ pub async fn weight_page(
     Path(spec): Path<String>,
     RawQuery(query): RawQuery,
 ) -> Result<Response> {
-    render_page(&host, &headers, &spec, query.as_deref(), &MatchType::Mult)
+    Ok(render_page(
+        &host,
+        &headers,
+        &spec,
+        query.as_deref(),
+        &MatchType::Mult,
+    ))
 }
 
 /// `GET /e/:spec` — like [`weight_page`], but compares against the closest
@@ -136,7 +145,13 @@ pub async fn exact_page(
     Path(spec): Path<String>,
     RawQuery(query): RawQuery,
 ) -> Result<Response> {
-    render_page(&host, &headers, &spec, query.as_deref(), &MatchType::AtLeast)
+    Ok(render_page(
+        &host,
+        &headers,
+        &spec,
+        query.as_deref(),
+        &MatchType::AtLeast,
+    ))
 }
 
 fn render_page(
@@ -145,13 +160,13 @@ fn render_page(
     spec: &str,
     query: Option<&str>,
     match_type: &MatchType,
-) -> Result<Response> {
+) -> Response {
     let Some((amt, unit)) = parse_weight_spec(spec) else {
-        return Ok((
+        return (
             StatusCode::BAD_REQUEST,
             Html("<h1>Invalid weight</h1><p>Try /w/225lbs, /w/100kg or /e/225lbs</p>".to_string()),
         )
-            .into_response());
+            .into_response();
     };
 
     let token = spec_token(amt, &unit);
@@ -161,7 +176,7 @@ fn render_page(
 
     // Humans → the interactive app, pre-filled via the `w`/`e` query param.
     if !is_crawler(headers) {
-        return Ok(Redirect::to(&format!("/?{prefix}={token}{q}")).into_response());
+        return Redirect::to(&format!("/?{prefix}={token}{q}")).into_response();
     }
 
     // Crawlers → OG/Twitter/Discord card unfurl.
@@ -229,7 +244,7 @@ fn render_page(
         card_url = esc(&card_url),
     );
 
-    Ok(Html(html).into_response())
+    Html(html).into_response()
 }
 
 #[cfg(test)]
