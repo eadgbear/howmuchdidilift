@@ -1,4 +1,3 @@
-use insta::{assert_debug_snapshot, with_settings};
 use interface::MeasureCreate;
 use liftcalc::{app::App, models::measures};
 use loco_rs::testing;
@@ -23,6 +22,7 @@ async fn test_model() {
     let create_params = MeasureCreate {
         name: "burgers".to_string(),
         grams: 500.0,
+        icon: None,
     };
     let create_req = measures::ActiveModel::create(&boot.app_context.db, create_params).await;
     println!("{:?}", create_req);

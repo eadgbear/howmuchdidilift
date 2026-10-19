@@ -19,7 +19,7 @@ use liftcalc::app::App;
 use loco_rs::{db, prelude::*};
 use migration::Migrator;
 
-#[allow(clippy::module_name_repetitions)]
+#[allow(clippy::module_name_repetitions, dead_code)] // exercised via `cargo loco task`, not unit tests
 pub struct SeedData;
 #[async_trait]
 impl Task for SeedData {

@@ -1,12 +1,12 @@
-pub mod login;
-pub mod register;
 mod convert;
+pub mod login;
 mod measures;
+pub mod register;
 
-pub use login::Login;
-pub use register::Register;
 pub use convert::Convert;
+pub use login::Login;
 pub use measures::MeasureList;
+pub use register::Register;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub enum Page {

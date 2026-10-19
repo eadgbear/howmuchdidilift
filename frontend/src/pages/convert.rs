@@ -1,10 +1,25 @@
-use crate::{
-    api::UnauthorizedApi
-};
-use interface::*;
+use crate::api::UnauthorizedApi;
+use crate::clipboard::{copy_image, copy_text, download_image, is_mobile, share_card};
 use leptos::*;
-use std::str::FromStr;
-use leptos_animated_for::AnimatedFor;
+use leptos_router::use_query_map;
+
+/// Split a share spec like `225lbs` / `100kg` into (amount, "Lbs"|"Kgs").
+fn parse_spec(spec: &str) -> Option<(String, String)> {
+    let s = spec.trim().to_lowercase();
+    let idx = s
+        .find(|c: char| !(c.is_ascii_digit() || c == '.'))
+        .unwrap_or(s.len());
+    let (num, unit) = s.split_at(idx);
+    if num.parse::<f64>().is_err() {
+        return None;
+    }
+    let unit = match unit.trim() {
+        "" | "lb" | "lbs" | "pound" | "pounds" => "Lbs",
+        "kg" | "kgs" | "kilo" | "kilos" | "kilogram" | "kilograms" => "Kgs",
+        _ => return None,
+    };
+    Some((num.to_string(), unit.to_string()))
+}
 
 #[component]
 pub fn Convert(api: UnauthorizedApi, show_links: RwSignal<bool>) -> impl IntoView {
@@ -12,13 +27,9 @@ pub fn Convert(api: UnauthorizedApi, show_links: RwSignal<bool>) -> impl IntoVie
     let (amt, set_amt) = create_signal(String::new());
     let (input_type, set_input_type) = create_signal("Lbs".to_string());
     let (wait_for_response, set_wait_for_response) = create_signal(false);
-    let responses = create_rw_signal(vec![]);
-
-    let responses_idx = Signal::derive(move || {
-        responses.get().into_iter().enumerate()//.collect::<Vec<(usize, RandomWeightResponse)>>()
-    });
-
-    //let previous_responses = create_slice(responses, )
+    // Latest card: (data-url image, optional share sentence).
+    let result = create_rw_signal(None::<(String, Option<String>)>);
+    let copied = create_rw_signal(None::<String>);
 
     let click_count = create_rw_signal(0);
     create_effect(move |_| {
@@ -29,44 +40,29 @@ pub fn Convert(api: UnauthorizedApi, show_links: RwSignal<bool>) -> impl IntoVie
     });
 
     let convert_action = create_action(move |(weight, unit): &(String, String)| {
-        log::debug!("Requesting weight conversion of {}{}", weight, unit);
-        let weight = weight.to_string().parse::<f64>().unwrap();
-        let unit = InputWeightType::from_str(unit).unwrap();
-        let req = RandomWeightRequest {
-            input_amt: weight,
-            input_type: unit
-        };
+        let weight = weight.clone();
+        let unit_lower = unit.to_lowercase();
         async move {
-            set_wait_for_response.update(|w| *w = true);
-            let result = api.convert(req).await;
-            log::debug!("Got response {:?}", result);
-            set_wait_for_response.update(|w| *w = false);
-            match result {
-                Ok(res) => {
-                    responses.update(|resps| {
-                        resps.insert(0, (6 as usize, res));
-                        while resps.len() > 5 {
-                            resps.pop();
-                        }
-                        resps.iter_mut().for_each(|entry| {
-                            entry.0 -= 1;
-                        });
-                    });
-                }
-                Err(e) => {
-                    set_error.update(|err| *err = Some(e.to_string()))
-                }
+            if weight.parse::<f64>().is_err() {
+                set_error.set(Some("Invalid weight".to_string()));
+                return;
             }
+            set_wait_for_response.set(true);
+            copied.set(None);
+            match api.fetch_card(&weight, &unit_lower).await {
+                Ok(card) => {
+                    set_error.set(None);
+                    result.set(Some(card));
+                }
+                Err(e) => set_error.set(Some(e.to_string())),
+            }
+            set_wait_for_response.set(false);
         }
-
     });
 
-    let disabled = Signal::derive(move || {
-        wait_for_response.get()
-    });
-    let submit_disabled = Signal::derive(move || {
-        disabled.get() || error.get().is_some() || amt.get().is_empty()
-    });
+    let disabled = Signal::derive(move || wait_for_response.get());
+    let submit_disabled =
+        Signal::derive(move || disabled.get() || error.get().is_some() || amt.get().is_empty());
     let dispatch_action = move || {
         if !submit_disabled.get() {
             convert_action.dispatch((amt.get(), input_type.get()));
@@ -75,12 +71,94 @@ pub fn Convert(api: UnauthorizedApi, show_links: RwSignal<bool>) -> impl IntoVie
 
     create_effect(move |_| {
         if !amt.get().is_empty() {
-            match amt.get().parse::<f64>() {
-                Err(e) => set_error.update(|v| *v = Some(format!("Unable to parse {} as a float: {:?}", amt.get(), e))),
-                _ => set_error.update(|v| *v = None)
+            if let Err(e) = amt.get().parse::<f64>() {
+                set_error.set(Some(format!(
+                    "Unable to parse {} as a number: {e:?}",
+                    amt.get()
+                )));
+            } else {
+                set_error.set(None);
             }
         }
     });
+
+    // Deep-link support: `/?w=225lbs` pre-fills and auto-converts (once).
+    let query = use_query_map();
+    let did_init = create_rw_signal(false);
+    create_effect(move |_| {
+        if did_init.get_untracked() {
+            return;
+        }
+        if let Some(spec) = query.with(|q| q.get("w").cloned()) {
+            if let Some((amt_s, unit_s)) = parse_spec(&spec) {
+                did_init.set(true);
+                set_amt.set(amt_s.clone());
+                set_input_type.set(unit_s.clone());
+                convert_action.dispatch((amt_s, unit_s));
+            }
+        }
+    });
+
+    let card_src = Signal::derive(move || result.get().map(|(url, _)| url));
+
+    let mobile = is_mobile();
+
+    let do_share = move |_| {
+        if let Some((url, share)) = result.get_untracked() {
+            let text = share.unwrap_or_default();
+            spawn_local(async move {
+                let status = share_card(&url, &text, "How much did I lift?").await;
+                copied.set((status != "cancelled").then_some(status)); // reset on cancel
+            });
+        }
+    };
+    let do_copy_image = move |_| {
+        if let Some((url, _)) = result.get_untracked() {
+            spawn_local(async move {
+                let ok = copy_image(&url).await;
+                copied.set(Some(if ok { "img" } else { "fail" }.to_string()));
+            });
+        }
+    };
+    let do_copy_text = move |_| {
+        if let Some((_, share)) = result.get_untracked() {
+            let text = share.unwrap_or_default();
+            spawn_local(async move {
+                let ok = copy_text(&text).await;
+                copied.set(Some(if ok { "txt" } else { "fail" }.to_string()));
+            });
+        }
+    };
+    let do_download = move |_| {
+        if let Some((url, _)) = result.get_untracked() {
+            let name = format!(
+                "hmdil-{}{}.png",
+                amt.get_untracked().trim().replace(' ', ""),
+                input_type.get_untracked().to_lowercase()
+            );
+            download_image(&url, &name);
+        }
+    };
+
+    let share_label = move || match copied.get().as_deref() {
+        Some("shared") => "Shared! ✓",
+        Some("fail") => "Couldn't share — try again",
+        _ => "Share",
+    };
+    let img_label = move || {
+        if copied.get().as_deref() == Some("img") {
+            "Image copied ✓"
+        } else {
+            "Copy image"
+        }
+    };
+    let txt_label = move || {
+        if copied.get().as_deref() == Some("txt") {
+            "Text copied ✓"
+        } else {
+            "Copy text"
+        }
+    };
 
     view! {
         <section class="items-center justify-center py-12 px-4 sm:px-6 lg:px-8 hero min-h-screen flex">
@@ -97,6 +175,7 @@ pub fn Convert(api: UnauthorizedApi, show_links: RwSignal<bool>) -> impl IntoVie
                                     focus:shadow-outline flex-grow transition duration-200 appearance-none p-2 border-2 border-gray-300
                                     text-black bg-gray-100 font-normal w-full h-14 text-xl rounded-md shadow-sm"
                                 placeholder="Amount lifted"
+                                prop:value=amt
                                 prop:disabled=move|| disabled.get()
                                 on:keyup=move |ev: ev::KeyboardEvent| {
                                     match &*ev.key() {
@@ -106,20 +185,18 @@ pub fn Convert(api: UnauthorizedApi, show_links: RwSignal<bool>) -> impl IntoVie
                                             set_amt.update(|v| *v = val);
                                         }
                                     }
-
                                 }
                                 on:change=move |ev| {
                                     let val = event_target_value(&ev);
                                     set_amt.update(|v| *v = val);
                                 }
-                                prop:disabled=move|| disabled.get()
                             />
                             <select
                                 class="focus:border-indigo-700 focus:outline-none
                                     focus:shadow-outline flex-grow transition duration-200 appearance-none p-2 m-2 h-14 border-2
                                     font-normal w-1/6 min-w-14 max-w-14 h-12 text-xl rounded-md shadow-sm"
+                                prop:value=input_type
                                 prop:disabled=move|| disabled.get() on:change= move|ev| {
-                                    log::debug!("Changing! {:?}", event_target_value(&ev));
                                     set_input_type.update(|v| *v = event_target_value(&ev))
                             }>
                                 <option value="Lbs" selected>"lbs"</option>
@@ -132,28 +209,29 @@ pub fn Convert(api: UnauthorizedApi, show_links: RwSignal<bool>) -> impl IntoVie
                                 on:click=move|_| dispatch_action()
                             >"Convert"</button>
                         </div>
-                            <div class="overflow-y-hidden h-full prose lg:prose-xl">
-                                <ul class="mt-2 w-full text-center rounded-md  z-10 ">
-                                    <Transition fallback=move|| view!{}>
-                                        <AnimatedFor
-                                            each=move|| responses.get()
-                                            key= |state| (state.0, state.1.when)
-                                            children=move |(idx, child)| {
-                                                log::debug!("Idx for {:?} is {}", child, idx);
-                                                let li_class=format!("p-3 border-gray-200 hover:text-white text-{}xl shadow shadow-slate-600", idx);
-                                                view! {
-                                                    <li class=li_class><code class="bg-primary">{child.input_amt.to_string()} {child.input_type.to_string().to_lowercase()}</code> " is " <code class="bg-primary">{child.output_weight.clone()}</code> " " {child.units.clone()}</li>
-                                                }
-                                            }
-                                            enter_from_class="opacity-0"
-                                            enter_class="duration-800"
-                                            move_class="duration-1200"
-                                            leave_class="opacity-0 duration-500"
-                                            appear=true
-                                        />
-                                    </Transition>
-                                </ul>
+                        <p class="text-error text-center mt-2">{move || error.get()}</p>
+                        <Show when=move || card_src.get().is_some() fallback=|| view!{}>
+                            <div class="flex flex-col items-center gap-4 mt-8">
+                                <img
+                                    class="rounded-3xl w-full max-w-md shadow-xl shadow-slate-900"
+                                    src=move || card_src.get().unwrap_or_default()
+                                    alt="Your lift, measured"
+                                />
+                                <div class="flex flex-wrap gap-2 justify-center">
+                                    {if mobile {
+                                        view! {
+                                            <button class="btn btn-primary" on:click=do_share>{share_label}</button>
+                                        }.into_view()
+                                    } else {
+                                        view! {
+                                            <button class="btn btn-primary" on:click=do_copy_image>{img_label}</button>
+                                            <button class="btn btn-secondary" on:click=do_copy_text>{txt_label}</button>
+                                        }.into_view()
+                                    }}
+                                    <button class="btn btn-outline" on:click=do_download>"Download image"</button>
+                                </div>
                             </div>
+                        </Show>
                     </div>
                 </form>
             </div>

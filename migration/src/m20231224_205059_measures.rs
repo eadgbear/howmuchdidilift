@@ -35,4 +35,5 @@ pub enum Measures {
     Name,
     NamePlural,
     Grams,
+    Icon,
 }

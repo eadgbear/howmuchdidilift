@@ -7,10 +7,12 @@ expression: "(measure, updated_measure)"
         id: 1,
         name: "grams",
         grams: 3.0,
+        icon: None,
     },
     Measure {
         id: 1,
         name: "grams",
         grams: 3.0,
+        icon: None,
     },
 )

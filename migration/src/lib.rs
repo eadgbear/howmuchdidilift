@@ -9,6 +9,7 @@ mod m20231224_205059_measures;
 mod m20240101_213454_drop_singular_name;
 
 mod m20240101_215625_rename_measure_name_column;
+mod m20240102_000001_add_measure_icon;
 pub struct Migrator;
 
 #[async_trait::async_trait]
@@ -20,6 +21,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20231224_205059_measures::Migration),
             Box::new(m20240101_213454_drop_singular_name::Migration),
             Box::new(m20240101_215625_rename_measure_name_column::Migration),
+            Box::new(m20240102_000001_add_measure_icon::Migration),
         ]
     }
 }

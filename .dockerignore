@@ -4,3 +4,4 @@ dockerfile
 .dockerignore
 .git
 .gitignore
+frontend/dist

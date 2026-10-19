@@ -14,6 +14,7 @@ pub struct Model {
     pub name: String,
     #[sea_orm(column_type = "Double")]
     pub grams: f64,
+    pub icon: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

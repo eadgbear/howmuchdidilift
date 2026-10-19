@@ -57,6 +57,9 @@ impl super::_entities::measures::Model {
 
     pub async fn find_random(db: &DatabaseConnection) -> ModelResult<Self> {
         let count = measures::Entity::find().count(db).await?;
+        if count == 0 {
+            return Err(ModelError::EntityNotFound);
+        }
         let random_offset = rand::thread_rng().gen_range(0..count);
         let measure = measures::Entity::find()
             .offset(random_offset)
@@ -82,6 +85,7 @@ impl super::_entities::measures::ActiveModel {
         let measure = measures::ActiveModel {
             name: ActiveValue::Set(params.name),
             grams: ActiveValue::Set(params.grams),
+            icon: ActiveValue::Set(params.icon),
             ..Default::default()
         }
         .insert(&txn)
