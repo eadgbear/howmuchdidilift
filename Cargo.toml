@@ -43,6 +43,7 @@ rust_decimal = "1.33.1"
 rust_decimal_macros = "1.33.1"
 resvg = "0.44"
 base64 = "0.22"
+serde_urlencoded = "0.7"
 
 [[bin]]
 name = "liftcalc-cli"

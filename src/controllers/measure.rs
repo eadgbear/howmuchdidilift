@@ -3,7 +3,7 @@
 #![allow(clippy::unused_async)]
 
 use axum::{
-    extract::Query,
+    extract::{Query, RawQuery},
     http::{header, HeaderName, HeaderValue},
     response::{IntoResponse, Response},
 };
@@ -13,7 +13,8 @@ use chrono::Utc;
 use serde::Deserialize;
 
 use interface::{
-    InputWeightType, Measure, MeasureCreate, RandomWeightRequest, RandomWeightResponse,
+    InputWeightType, MatchType, Measure, MeasureCreate, RandomWeightRequest,
+    RandomWeightResponse,
 };
 use loco_rs::prelude::*;
 use sea_orm::{prelude::DateTimeUtc, TryIntoModel};
@@ -138,7 +139,12 @@ struct LiftResult {
 }
 
 /// Compute a lift result for `amt`/`unit` against a specific `measure`.
-fn build_lift_result(amt: f64, unit: &InputWeightType, measure: &Measure) -> LiftResult {
+fn build_lift_result(
+    amt: f64,
+    unit: &InputWeightType,
+    measure: &Measure,
+    match_type: &MatchType,
+) -> LiftResult {
     let source_grams = amt * grams_multiplier(unit);
     let div = source_grams / measure.grams;
     // Show both units; use the entered amount verbatim for its own unit (no
@@ -162,7 +168,8 @@ fn build_lift_result(amt: f64, unit: &InputWeightType, measure: &Measure) -> Lif
     };
 
     let permalink = format!(
-        "howmuchdidilift.com/w/{}",
+        "howmuchdidilift.com/{}/{}",
+        crate::controllers::pages::path_prefix(match_type),
         crate::controllers::pages::spec_token(amt, unit)
     );
     let units = measure.name.clone();
@@ -185,8 +192,12 @@ pub async fn convert(
     State(ctx): State<AppContext>,
     Json(params): Json<RandomWeightRequest>,
 ) -> Result<Json<RandomWeightResponse>> {
-    let measure = crate::fact_store::random_measure(&ctx.db).await?;
-    let r = build_lift_result(params.input_amt, &params.input_type, &measure);
+    let match_type = params.match_type.unwrap_or(MatchType::Mult);
+    let terms = params.name_search.unwrap_or_default();
+    let lift_grams = params.input_amt * grams_multiplier(&params.input_type);
+    let measure =
+        crate::fact_store::pick_measure(&ctx.db, lift_grams, &match_type, &terms).await?;
+    let r = build_lift_result(params.input_amt, &params.input_type, &measure, &match_type);
 
     let mut f = Formatter::new()
         .precision(Precision::Decimals(2))
@@ -210,6 +221,8 @@ pub struct CardParams {
     pub amt: f64,
     #[serde(default = "default_unit")]
     pub unit: InputWeightType,
+    #[serde(default, rename = "match")]
+    pub match_type: Option<MatchType>,
 }
 
 fn default_unit() -> InputWeightType {
@@ -218,15 +231,24 @@ fn default_unit() -> InputWeightType {
 
 /// Renders a shareable PNG card for a given lift (always a fresh random measure).
 ///
+/// `match=atleast` picks among the closest measures instead of a random one;
+/// repeatable `q=` params restrict the pick to measures whose name matches.
+///
 /// The matching share sentence rides along in the `x-share-text` header so the
 /// client can copy text matching the image from one fetch. Public (no auth) so
 /// social scrapers can fetch it as an `og:image`.
 pub async fn card(
     State(ctx): State<AppContext>,
     Query(params): Query<CardParams>,
+    RawQuery(query): RawQuery,
 ) -> Result<Response> {
-    let measure = crate::fact_store::random_measure(&ctx.db).await?;
-    let r = build_lift_result(params.amt, &params.unit, &measure);
+    let match_type = params.match_type.unwrap_or(MatchType::Mult);
+    // `Query` keeps only one value per key, so read the repeatable `q` raw.
+    let terms = crate::controllers::pages::search_terms(query.as_deref());
+    let lift_grams = params.amt * grams_multiplier(&params.unit);
+    let measure =
+        crate::fact_store::pick_measure(&ctx.db, lift_grams, &match_type, &terms).await?;
+    let r = build_lift_result(params.amt, &params.unit, &measure, &match_type);
 
     let png = crate::card::render_card(
         &r.primary,

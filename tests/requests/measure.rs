@@ -1,5 +1,7 @@
 use insta::{assert_debug_snapshot, with_settings};
-use interface::{InputWeightType, Measure, RandomWeightRequest, RandomWeightResponse};
+use interface::{
+    InputWeightType, MatchType, Measure, RandomWeightRequest, RandomWeightResponse,
+};
 use liftcalc::app::App;
 use loco_rs::prelude::AppContext;
 use loco_rs::{testing, TestServer};
@@ -143,6 +145,8 @@ async fn can_convert_lbs() {
         let convert_request = RandomWeightRequest {
             input_amt: 100.0,
             input_type: InputWeightType::Lbs,
+            match_type: None,
+            name_search: None,
         };
         let random_weight = request
             .post("/api/measures/convert")
@@ -181,6 +185,8 @@ async fn can_convert_kgs() {
         let convert_request = RandomWeightRequest {
             input_amt: 1.0,
             input_type: InputWeightType::Kgs,
+            match_type: None,
+            name_search: None,
         };
         let random_weight = request
             .post("/api/measures/convert")
@@ -199,6 +205,64 @@ async fn can_convert_kgs() {
             random_weight.permalink
         );
         assert!(random_weight.share_text.contains("howmuchdidilift.com"));
+    })
+    .await;
+}
+
+#[tokio::test]
+#[serial]
+async fn can_convert_at_least() {
+    configure_insta!();
+
+    testing::request::<App, _, _>(|request, _ctx| async move {
+        let convert_request = RandomWeightRequest {
+            input_amt: 225.0,
+            input_type: InputWeightType::Lbs,
+            match_type: Some(MatchType::AtLeast),
+            name_search: None,
+        };
+        let random_weight = request
+            .post("/api/measures/convert")
+            .json(&convert_request)
+            .await;
+        random_weight.assert_status_ok();
+
+        let random_weight: RandomWeightResponse = random_weight.json();
+        assert!(
+            random_weight.permalink.ends_with("/e/225lbs"),
+            "permalink was {}",
+            random_weight.permalink
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
+#[serial]
+async fn can_convert_with_name_search() {
+    configure_insta!();
+
+    testing::request::<App, _, _>(|request, _ctx| async move {
+        let convert_request = RandomWeightRequest {
+            input_amt: 100.0,
+            input_type: InputWeightType::Lbs,
+            match_type: None,
+            name_search: Some(vec!["BANANA".to_string()]),
+        };
+        let random_weight = request
+            .post("/api/measures/convert")
+            .json(&convert_request)
+            .await;
+        random_weight.assert_status_ok();
+
+        let random_weight: RandomWeightResponse = random_weight.json();
+        assert!(
+            random_weight.units.to_lowercase().contains("banana"),
+            "units were {}",
+            random_weight.units
+        );
+        assert!(random_weight.permalink.ends_with("/w/100lbs"));
+        assert!(!random_weight.share_text.contains("q="));
     })
     .await;
 }

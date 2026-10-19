@@ -3,15 +3,17 @@
 //! The `/w/:spec` permalink (e.g. `/w/225lbs`, `/w/100kg`) renders a small HTML
 //! page carrying OpenGraph/Twitter meta so the result unfurls into a share card
 //! on Discord/iMessage/Twitter. The `og:image` points at the PNG endpoint.
+//! `/e/:spec` is the same but compares against the closest measures
+//! ([`MatchType::AtLeast`]). Either accepts repeatable `?q=` name filters.
 
 #![allow(clippy::missing_errors_doc)]
 
 use axum::{
-    extract::{Host, Path},
+    extract::{Host, Path, RawQuery},
     http::{HeaderMap, StatusCode},
     response::{Html, IntoResponse, Redirect, Response},
 };
-use interface::InputWeightType;
+use interface::{InputWeightType, MatchType};
 use loco_rs::prelude::*;
 
 /// Social/preview crawlers that should receive the OG HTML. Everyone else is a
@@ -71,6 +73,33 @@ pub fn parse_weight_spec(spec: &str) -> Option<(f64, InputWeightType)> {
     Some((amt, unit))
 }
 
+/// URL path prefix for a match type: `w` (multiples) or `e` (closest).
+pub fn path_prefix(match_type: &MatchType) -> &'static str {
+    match match_type {
+        MatchType::Mult => "w",
+        MatchType::AtLeast => "e",
+    }
+}
+
+/// Every `q` value in a raw query string, e.g. `q=cat&q=dog` → `["cat", "dog"]`.
+pub fn search_terms(raw_query: Option<&str>) -> Vec<String> {
+    serde_urlencoded::from_str::<Vec<(String, String)>>(raw_query.unwrap_or_default())
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|(k, v)| k == "q" && !v.trim().is_empty())
+        .map(|(_, v)| v)
+        .collect()
+}
+
+/// Re-encode search terms as `&q=…` pairs for appending to a URL.
+fn q_suffix(terms: &[String]) -> String {
+    terms
+        .iter()
+        .filter_map(|t| serde_urlencoded::to_string([("q", t)]).ok())
+        .map(|pair| format!("&{pair}"))
+        .collect()
+}
+
 /// Best-effort absolute base URL from proxy headers, falling back to the Host.
 fn base_url(host: &str, headers: &HeaderMap) -> String {
     let scheme = headers
@@ -94,27 +123,56 @@ pub async fn weight_page(
     Host(host): Host,
     headers: HeaderMap,
     Path(spec): Path<String>,
+    RawQuery(query): RawQuery,
 ) -> Result<Response> {
-    let Some((amt, unit)) = parse_weight_spec(&spec) else {
+    render_page(&host, &headers, &spec, query.as_deref(), &MatchType::Mult)
+}
+
+/// `GET /e/:spec` — like [`weight_page`], but compares against the closest
+/// measures rather than multiples of a random one.
+pub async fn exact_page(
+    Host(host): Host,
+    headers: HeaderMap,
+    Path(spec): Path<String>,
+    RawQuery(query): RawQuery,
+) -> Result<Response> {
+    render_page(&host, &headers, &spec, query.as_deref(), &MatchType::AtLeast)
+}
+
+fn render_page(
+    host: &str,
+    headers: &HeaderMap,
+    spec: &str,
+    query: Option<&str>,
+    match_type: &MatchType,
+) -> Result<Response> {
+    let Some((amt, unit)) = parse_weight_spec(spec) else {
         return Ok((
             StatusCode::BAD_REQUEST,
-            Html("<h1>Invalid weight</h1><p>Try /w/225lbs or /w/100kg</p>".to_string()),
+            Html("<h1>Invalid weight</h1><p>Try /w/225lbs, /w/100kg or /e/225lbs</p>".to_string()),
         )
             .into_response());
     };
 
     let token = spec_token(amt, &unit);
+    let prefix = path_prefix(match_type);
+    // Name filters ride along to the app and card image, never the share URL.
+    let q = q_suffix(&search_terms(query));
 
-    // Humans → the interactive app, pre-filled via the `w` query param.
-    if !is_crawler(&headers) {
-        return Ok(Redirect::to(&format!("/?w={token}")).into_response());
+    // Humans → the interactive app, pre-filled via the `w`/`e` query param.
+    if !is_crawler(headers) {
+        return Ok(Redirect::to(&format!("/?{prefix}={token}{q}")).into_response());
     }
 
     // Crawlers → OG/Twitter/Discord card unfurl.
-    let base = base_url(&host, &headers);
+    let base = base_url(host, headers);
     let unit_l = unit.to_string().to_lowercase();
-    let card_url = format!("{base}/api/measures/card?amt={amt}&unit={unit_l}");
-    let page_url = format!("{base}/w/{}", esc(&token));
+    let match_param = match match_type {
+        MatchType::Mult => "",
+        MatchType::AtLeast => "&match=atleast",
+    };
+    let card_url = format!("{base}/api/measures/card?amt={amt}&unit={unit_l}{match_param}{q}");
+    let page_url = format!("{base}/{prefix}/{}", esc(&token));
     let (cw, ch) = crate::card::dimensions();
 
     // Both units in the description; the fun payload is the card image itself.
@@ -162,12 +220,13 @@ pub async fn weight_page(
 </head>
 <body>
   <img src="{card_url}" alt="{title}"/>
-  <a class="btn" href="{base}/?w={token}">Convert your own lift &rarr;</a>
+  <a class="btn" href="{base}/?{prefix}={token}">Convert your own lift &rarr;</a>
 </body>
 </html>"##,
         title = esc(&title),
         description = esc(&description),
         token = esc(&token),
+        card_url = esc(&card_url),
     );
 
     Ok(Html(html).into_response())
@@ -206,6 +265,16 @@ mod tests {
             assert!((a - amt).abs() < f64::EPSILON);
             assert_eq!(u.to_string(), unit.to_string());
         }
+    }
+
+    #[test]
+    fn search_terms_collects_repeated_q() {
+        assert_eq!(
+            search_terms(Some("q=cat&x=1&q=hot%20dog&q=")),
+            ["cat", "hot dog"]
+        );
+        assert!(search_terms(None).is_empty());
+        assert_eq!(q_suffix(&["hot dog".to_string()]), "&q=hot+dog");
     }
 
     #[test]
